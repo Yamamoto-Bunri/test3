@@ -1,5 +1,5 @@
 /**
- * フェーズ1：コード整理（安定・強化版）
+ * 英単語学習システム Ver3.2 (フェーズ3対応版)
  */
 
 const state = {
@@ -9,17 +9,16 @@ const state = {
     displayIndices: [],
     currentIndex: 0,
     isRandom: false,
+    isOnlyUnlearned: false, // 未習得のみフィルタ
     masteredWords: [],
     activeScreen: ""
 };
 
 const app = {
+    // --- 初期化 ---
     init() {
-        // データ読み込み失敗時の強力なエラーハンドリング
         if (typeof allUnits === 'undefined') {
-            const errorText = `【エラー】単語データが見つかりません。\n\n以下の原因が考えられます：\n1. ファイル名が「data.js」になっていない（Data.jsなど大文字はNG）\n2. index.html と同じフォルダに data.js がアップロードされていない\n3. ブラウザが古いデータを記憶している（Ctrl+F5 で更新してください）\n4. data.js の中のデータ形式が壊れている`;
-            
-            this.showError(errorText);
+            this.showError("data.js が読み込めませんでした。ファイルを確認してください。");
             this.showScreen('setup-screen'); 
             return;
         }
@@ -34,6 +33,7 @@ const app = {
         }
     },
 
+    // --- 画面遷移管理 ---
     showScreen(screenId) {
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         const target = document.getElementById(screenId);
@@ -49,12 +49,35 @@ const app = {
         }
     },
 
+    // --- 設定変更（表示順・フィルタ） ---
+    setOrder(random) {
+        state.isRandom = random;
+        document.getElementById('btn-order').classList.toggle('selected', !random);
+        document.getElementById('btn-random').classList.toggle('selected', random);
+    },
+
+    toggleFilterMode(onlyUnlearned) {
+        state.isOnlyUnlearned = onlyUnlearned;
+        document.getElementById('btn-filter-all').classList.toggle('selected', !onlyUnlearned);
+        document.getElementById('btn-filter-unlearned').classList.toggle('selected', onlyUnlearned);
+        
+        // 学習中であれば、リストを再構成して最初に戻る
+        if (state.activeScreen === 'learning-screen') {
+            this.prepareIndices();
+            state.currentIndex = 0;
+            if (state.displayIndices.length > 0) {
+                this.showCard();
+            } else {
+                alert("表示できる単語がありません。設定を戻します。");
+                this.toggleFilterMode(false);
+            }
+        }
+    },
+
+    // --- ログイン・ログアウト ---
     login() {
         const input = document.getElementById('name-input').value.trim();
-        if (!input) {
-            alert("名前を入力してください");
-            return;
-        }
+        if (!input) { alert("名前を入力してください"); return; }
         state.studentName = input;
         localStorage.setItem('studentName', input);
         this.showScreen('setup-screen');
@@ -62,17 +85,16 @@ const app = {
     },
 
     logout() {
-        if(confirm("名前を削除してログアウトしますか？")) {
+        if(confirm("ログアウトしますか？")) {
             localStorage.removeItem('studentName');
-            document.getElementById('name-input').value = "";
             this.showScreen('login-screen');
         }
     },
 
+    // --- Unitリスト生成 ---
     renderUnitList() {
         const list = document.getElementById('unit-list');
-        if (!list || typeof allUnits === 'undefined') return; // undefinedなら描画しない
-        
+        if (!list || typeof allUnits === 'undefined') return;
         list.innerHTML = "";
         Object.keys(allUnits).forEach(unit => {
             const btn = document.createElement('button');
@@ -83,11 +105,13 @@ const app = {
         });
     },
 
+    // --- 学習開始 ---
     async startLearning(unitName) {
         state.currentUnit = unitName;
         state.wordList = allUnits[unitName];
         state.currentIndex = 0;
 
+        // Firebaseから進捗取得
         try {
             if (window.fb) {
                 const { db, doc, getDoc } = window.fb;
@@ -101,25 +125,37 @@ const app = {
         }
 
         this.prepareIndices();
+        
+        if (state.displayIndices.length === 0) {
+            alert("このユニットには未習得の単語がありません！");
+            return;
+        }
+
         this.showScreen('learning-screen');
         this.showCard();
     },
 
+    // --- 表示順序とフィルタの準備 ---
     prepareIndices() {
-        state.displayIndices = state.wordList.map((_, i) => i);
-        if (state.isRandom) {
-            state.displayIndices.sort(() => Math.random() - 0.5);
+        // すべてのインデックス
+        let indices = state.wordList.map((_, i) => i);
+
+        // 未習得のみフィルタがONの場合
+        if (state.isOnlyUnlearned) {
+            indices = indices.filter(i => !state.masteredWords.includes(state.wordList[i].Word));
         }
+
+        // ランダム設定があればシャッフル
+        if (state.isRandom) {
+            indices.sort(() => Math.random() - 0.5);
+        }
+
+        state.displayIndices = indices;
     },
 
-    setOrder(random) {
-        state.isRandom = random;
-        document.getElementById('btn-order').classList.toggle('selected', !random);
-        document.getElementById('btn-random').classList.toggle('selected', random);
-    },
-
+    // --- カード表示 ---
     showCard() {
-        if (!state.wordList || state.wordList.length === 0) return;
+        if (state.displayIndices.length === 0) return;
         
         const realIndex = state.displayIndices[state.currentIndex];
         const data = state.wordList[realIndex];
@@ -154,7 +190,7 @@ const app = {
                 </div>
                 <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
                     <label style="font-size: 1.2em; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                        <input type="checkbox" style="width: 20px; height: 20px;" 
+                        <input type="checkbox" style="width: 22px; height: 22px;" 
                         ${isMastered ? 'checked' : ''} onchange="app.toggleMastered(event, '${data.Word}')">
                         <span>覚えた！</span>
                     </label>
@@ -164,6 +200,7 @@ const app = {
         document.getElementById("card-back-contents").innerHTML = html;
     },
 
+    // --- 習得保存 ---
     async toggleMastered(event, word) {
         event.stopPropagation();
         if (event.target.checked) {
@@ -172,6 +209,8 @@ const app = {
             state.masteredWords = state.masteredWords.filter(w => w !== word);
         }
         document.getElementById("complete-badge").style.display = event.target.checked ? "block" : "none";
+        
+        this.updateUI(); // 習得率を即座に更新
 
         try {
             if (window.fb) {
@@ -182,14 +221,15 @@ const app = {
         } catch (e) { console.error("Firebase保存失敗:", e); }
     },
 
+    // --- ナビゲーション ---
     nextCard() {
         if (state.currentIndex < state.displayIndices.length - 1) {
             state.currentIndex++;
             this.showCard();
         } else {
             if(confirm("最後まで到達しました。もう一度学習しますか？")) {
+                this.prepareIndices(); // フィルタ条件で再構成
                 state.currentIndex = 0;
-                if(state.isRandom) this.prepareIndices();
                 this.showCard();
             } else {
                 this.showScreen('setup-screen');
@@ -204,14 +244,28 @@ const app = {
         }
     },
 
+    // --- UI更新（習得率の視覚化） ---
     updateUI() {
-        const total = state.wordList.length;
-        const current = state.currentIndex + 1;
-        document.getElementById('progress-text').innerText = `${current} / ${total}`;
+        const totalInUnit = state.wordList.length;
+        const masteredInUnit = state.masteredWords.length;
+        const progressPercent = (masteredInUnit / totalInUnit) * 100;
+
+        // 習得状況をテキストで表示
+        const currentPos = state.currentIndex + 1;
+        const displayTotal = state.displayIndices.length;
+        document.getElementById('progress-text').innerText = 
+            `Unit習得率: ${Math.round(progressPercent)}% (${masteredInUnit}/${totalInUnit}) | 表示中: ${currentPos}/${displayTotal}`;
+        
+        // プログレスバーの更新（習得率を表示）
         const bar = document.getElementById('progress-bar');
-        if(bar) bar.style.width = `${(current / total) * 100}%`;
+        if(bar) {
+            bar.style.width = `${progressPercent}%`;
+            // 完了したら色を変える
+            bar.style.backgroundColor = progressPercent === 100 ? "#4caf50" : "#007bff";
+        }
     },
 
+    // --- 音声再生 ---
     playAudio(event) {
         if (event) event.stopPropagation();
         const word = document.getElementById('word-display').innerText;
@@ -234,9 +288,18 @@ const app = {
 
 window.app = app;
 
-// 待機時間を少し長め（200ms）にとり、全てのスクリプト展開を確実に待つ
+// 通信遅延（data.js読み込み）を考慮した初期化
 window.addEventListener('load', () => {
-    setTimeout(() => {
-        app.init();
-    }, 200);
+    let retry = 0;
+    const check = () => {
+        if (typeof allUnits !== 'undefined') {
+            app.init();
+        } else if (retry < 50) {
+            retry++;
+            setTimeout(check, 100);
+        } else {
+            app.init(); // 5秒待ってダメならエラー表示へ
+        }
+    };
+    check();
 });

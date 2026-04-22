@@ -22,7 +22,7 @@
         .unit-btn { width: 100%; padding: 15px; margin: 5px 0; background: white; border: 1px solid #ddd; font-size: 1.1em; text-align: left; border-radius: 8px; }
 
         .mode-select { display: flex; gap: 10px; width: 100%; margin-bottom: 20px; }
-        .mode-btn { flex: 1; padding: 10px; border: 2px solid var(--primary-color); background: white; color: var(--primary-color); font-weight: bold; border-radius: 8px; }
+        .mode-btn { flex: 1; padding: 10px; border: 2px solid var(--primary-color); background: white; color: var(--primary-color); font-weight: bold; border-radius: 8px; font-size: 0.9em; }
         .mode-btn.selected { background: var(--primary-color); color: white; }
 
         #card-container { width: 100%; height: 450px; perspective: 1000px; margin: 20px 0; }
@@ -32,7 +32,7 @@
         .card-back { transform: rotateY(180deg); overflow-y: auto; display: block; }
 
         #progress-container { width: 100%; background: #ddd; border-radius: 10px; height: 10px; margin: 10px 0; }
-        #progress-bar { width: 0%; height: 100%; background: #4caf50; border-radius: 10px; transition: width 0.3s; }
+        #progress-bar { width: 0%; height: 100%; background: var(--primary-color); border-radius: 10px; transition: width 0.5s ease; }
         .nav-buttons { display: flex; justify-content: space-between; width: 100%; margin-top: 10px; }
         .nav-buttons button { padding: 12px; width: 48%; color: white; font-size: 1em; border-radius: 8px; }
 
@@ -56,20 +56,26 @@
         
         <div id="error-message"></div>
 
-        <h3>表示順</h3>
+        <h3>1. 表示順</h3>
         <div class="mode-select">
             <button id="btn-order" class="mode-btn selected" onclick="app.setOrder(false)">順番通り</button>
             <button id="btn-random" class="mode-btn" onclick="app.setOrder(true)">ランダム</button>
         </div>
 
-        <h3>Unitを選択</h3>
+        <h3>2. 学習対象</h3>
+        <div class="mode-select">
+            <button id="btn-filter-all" class="mode-btn selected" onclick="app.toggleFilterMode(false)">すべて</button>
+            <button id="btn-filter-unlearned" class="mode-btn" onclick="app.toggleFilterMode(true)">未習得のみ</button>
+        </div>
+
+        <h3>3. Unitを選択</h3>
         <div id="unit-list"></div>
     </div>
 
     <div id="learning-screen" class="screen">
         <div style="width: 100%; display: flex; justify-content: space-between; align-items: center;">
             <button onclick="app.showScreen('setup-screen')" style="background:none; color:blue; font-size:1em;">← 戻る</button>
-            <div id="progress-text" style="font-weight:bold; font-size:0.9em;"></div>
+            <div id="progress-text" style="font-weight:bold; font-size:0.85em; color:#555;"></div>
         </div>
         <div id="progress-container"><div id="progress-bar"></div></div>
 
