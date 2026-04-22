@@ -1,125 +1,234 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>英単語学習システム Ver3</title>
-    <style>
-        :root { --primary-color: #007bff; --bg-color: #f0f2f5; }
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: var(--bg-color); padding: 20px; margin: 0; }
+/**
+ * フェーズ1：コード整理（stateオブジェクトへの集約版）
+ */
+
+const state = {
+    studentName: "",
+    currentUnit: "",
+    wordList: [],
+    displayIndices: [],
+    currentIndex: 0,
+    isRandom: false,
+    masteredWords: [],
+    activeScreen: ""
+};
+
+const app = {
+    // --- 初期化 ---
+    init() {
+        // data.js の読み込みチェック
+        if (typeof allUnits === 'undefined') {
+            this.showError("data.js が読み込めませんでした。ファイルを確認してください。");
+            this.showScreen('setup-screen'); // エラーを表示するためにセットアップ画面へ
+            return;
+        }
+
+        const savedName = localStorage.getItem('studentName');
+        if (savedName) {
+            state.studentName = savedName;
+            this.showScreen('setup-screen');
+            this.renderUnitList();
+        } else {
+            this.showScreen('login-screen');
+        }
+    },
+
+    // --- 画面遷移管理 ---
+    showScreen(screenId) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        const target = document.getElementById(screenId);
+        if (target) {
+            target.classList.add('active');
+            state.activeScreen = screenId;
+        }
         
-        .screen { display: none; width: 100%; max-width: 400px; flex-direction: column; align-items: center; animation: fadeIn 0.3s; }
-        .active { display: flex; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        if (screenId === 'setup-screen') {
+            document.getElementById('display-name').innerText = state.studentName;
+        }
+    },
 
-        /* 入力フォーム・ボタン共通 */
-        input[type="text"] { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 1em; }
-        button { cursor: pointer; border: none; border-radius: 8px; transition: opacity 0.2s; }
-        button:active { opacity: 0.7; }
+    // --- ログイン・ログアウト ---
+    login() {
+        const input = document.getElementById('name-input').value.trim();
+        if (!input) {
+            alert("名前を入力してください");
+            return;
+        }
+        state.studentName = input;
+        localStorage.setItem('studentName', input);
+        this.showScreen('setup-screen');
+        this.renderUnitList();
+    },
 
-        .btn-primary { background: var(--primary-color); color: white; padding: 12px 24px; width: 100%; font-size: 1.1em; }
+    logout() {
+        localStorage.removeItem('studentName');
+        document.getElementById('name-input').value = "";
+        this.showScreen('login-screen');
+    },
+
+    // --- Unitリスト生成 ---
+    renderUnitList() {
+        const list = document.getElementById('unit-list');
+        list.innerHTML = "";
+        Object.keys(allUnits).forEach(unit => {
+            const btn = document.createElement('button');
+            btn.className = "unit-btn";
+            btn.innerText = unit;
+            btn.onclick = () => this.startLearning(unit);
+            list.appendChild(btn);
+        });
+    },
+
+    // --- 学習開始 ---
+    async startLearning(unitName) {
+        state.currentUnit = unitName;
+        state.wordList = allUnits[unitName];
+        state.currentIndex = 0;
+
+        // Firebaseから進捗取得
+        try {
+            const { db, doc, getDoc } = window.fb;
+            const docRef = doc(db, "progress", state.studentName, "units", unitName);
+            const docSnap = await getDoc(docRef);
+            state.masteredWords = docSnap.exists() ? (docSnap.data().masteredWords || []) : [];
+        } catch (e) {
+            console.error("Firebase取得失敗:", e);
+            state.masteredWords = [];
+        }
+
+        this.prepareIndices();
+        this.showScreen('learning-screen');
+        this.showCard();
+    },
+
+    // --- 表示順序の準備 ---
+    prepareIndices() {
+        state.displayIndices = state.wordList.map((_, i) => i);
+        if (state.isRandom) {
+            state.displayIndices.sort(() => Math.random() - 0.5);
+        }
+    },
+
+    setOrder(random) {
+        state.isRandom = random;
+        document.getElementById('btn-order').classList.toggle('selected', !random);
+        document.getElementById('btn-random').classList.toggle('selected', random);
+    },
+
+    // --- カード表示 ---
+    showCard() {
+        const realIndex = state.displayIndices[state.currentIndex];
+        const data = state.wordList[realIndex];
+        const isMastered = state.masteredWords.includes(data.Word);
+
+        // カードを表面に戻す
+        document.getElementById('card').classList.remove('is-flipped');
+
+        // 表面の更新
+        document.getElementById("word-display").innerText = data.Word;
+        document.getElementById("pos-display").innerText = data["品詞"] || "";
+        document.getElementById("phonetic-display").innerText = data["発音記号"] || "";
+        document.getElementById("complete-badge").style.display = isMastered ? "block" : "none";
+
+        // 裏面の更新
+        this.renderBackSide(data, isMastered);
+        this.updateUI();
+    },
+
+    renderBackSide(data, isMastered) {
+        const meanings = [data["意味1"], data["意味2"], data["意味3"]]
+            .filter(m => m && m.trim() !== "").join(" / ");
         
-        /* Unitリスト */
-        #unit-list { width: 100%; margin-top: 10px; }
-        .unit-btn { width: 100%; padding: 15px; margin: 5px 0; background: white; border: 1px solid #ddd; font-size: 1.1em; text-align: left; }
+        let html = `
+            <div style="padding: 20px; text-align: center;">
+                <h2 style="color: #007bff; margin-bottom: 10px;">${meanings}</h2>
+                <div style="text-align: left; font-size: 0.85em; border-top: 1px solid #eee; margin-top: 10px; padding-top: 10px;">
+        `;
+        if (data["別の品詞"]) html += `<div style="background:#f8f9fa; padding:5px; margin-bottom:8px;"><strong>【別の品詞】</strong><br>${data["別の品詞"]}: ${data["意味"] || ""}</div>`;
+        if (data["派生語1"]) html += `<div style="margin-bottom:5px;"><strong>【派生語1】</strong><br>${data["派生語1"]} [${data["品詞1"] || ""}]<br>${data["意味1.1"] || ""}</div>`;
+        if (data["派生語2"]) html += `<div><strong>【派生語2】</strong><br>${data["派生語2"]} [${data["品詞2"] || ""}]<br>${data["意味2.1"] || ""}</div>`;
 
-        /* モード切替 */
-        .mode-select { display: flex; gap: 10px; width: 100%; margin-bottom: 20px; }
-        .mode-btn { flex: 1; padding: 10px; border: 2px solid var(--primary-color); background: white; color: var(--primary-color); font-weight: bold; }
-        .mode-btn.selected { background: var(--primary-color); color: white; }
-
-        /* カードのスタイル */
-        #card-container { width: 100%; height: 450px; perspective: 1000px; margin: 20px 0; }
-        .card { width: 100%; height: 100%; position: relative; transition: transform 0.6s; transform-style: preserve-3d; }
-        .card.is-flipped { transform: rotateY(180deg); }
-        .card-face { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); background: white; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .card-back { transform: rotateY(180deg); overflow-y: auto; display: block; }
-
-        #progress-container { width: 100%; background: #ddd; border-radius: 10px; height: 10px; margin: 10px 0; }
-        #progress-bar { width: 0%; height: 100%; background: #4caf50; border-radius: 10px; transition: width 0.3s; }
-        .nav-buttons { display: flex; justify-content: space-between; width: 100%; margin-top: 10px; }
-        .nav-buttons button { padding: 12px; width: 48%; color: white; font-size: 1em; }
-
-        /* エラー表示 */
-        #error-message { color: red; background: #fee; padding: 10px; border-radius: 5px; margin: 10px 0; display: none; }
-    </style>
-</head>
-<body>
-
-    <div id="login-screen" class="screen">
-        <h1>英単語学習</h1>
-        <p>名前を入力してください</p>
-        <input type="text" id="name-input" placeholder="例：山田 太郎">
-        <button class="btn-primary" onclick="app.login()">学習を始める</button>
-    </div>
-
-    <div id="setup-screen" class="screen">
-        <div style="width:100%; display:flex; justify-content:space-between; align-items:center;">
-            <p>生徒: <strong id="display-name"></strong></p>
-            <button onclick="app.logout()" style="background:none; color:blue; text-decoration:underline;">変更</button>
-        </div>
-        
-        <div id="error-message"></div>
-
-        <h3>表示順</h3>
-        <div class="mode-select">
-            <button id="btn-order" class="mode-btn selected" onclick="app.setOrder(false)">順番通り</button>
-            <button id="btn-random" class="mode-btn" onclick="app.setOrder(true)">ランダム</button>
-        </div>
-
-        <h3>Unitを選択</h3>
-        <div id="unit-list"></div>
-    </div>
-
-    <div id="learning-screen" class="screen">
-        <div style="width: 100%; display: flex; justify-content: space-between; align-items: center;">
-            <button onclick="app.showScreen('setup-screen')" style="background:none; color:blue; font-size:1em;">← 戻る</button>
-            <div id="progress-text" style="font-weight:bold; font-size:0.9em;"></div>
-        </div>
-        <div id="progress-container"><div id="progress-bar"></div></div>
-
-        <div id="card-container">
-            <div class="card" id="card" onclick="this.classList.toggle('is-flipped')">
-                <div class="card-face card-front">
-                    <div id="complete-badge" style="position:absolute; top:20px; right:20px; color:green; font-weight:bold; display:none;">✅ 習得済</div>
-                    <p id="pos-display" style="color: #e91e63; font-weight: bold; margin:0;"></p>
-                    <div style="display: flex; align-items: center; gap: 10px; margin: 15px 0;">
-                        <h1 id="word-display" style="font-size: 3em; margin: 0;"></h1>
-                        <button onclick="app.playAudio(event)" style="background:none; font-size: 2em;">🔊</button>
-                    </div>
-                    <p id="phonetic-display" style="color: #666; font-size: 1.1em; margin:0;"></p>
-                    <p style="color:#aaa; font-size:0.8em; position:absolute; bottom:20px;">タップして答えを見る</p>
+        html += `
                 </div>
-                <div class="card-face card-back" id="card-back-contents"></div>
+                <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
+                    <label style="font-size: 1.2em; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                        <input type="checkbox" style="width: 20px; height: 20px;" 
+                        ${isMastered ? 'checked' : ''} onchange="app.toggleMastered(event, '${data.Word}')">
+                        <span>覚えた！</span>
+                    </label>
+                </div>
             </div>
-        </div>
+        `;
+        document.getElementById("card-back-contents").innerHTML = html;
+    },
 
-        <div class="nav-buttons">
-            <button onclick="app.prevCard()" style="background:#6c757d;">前へ</button>
-            <button onclick="app.nextCard()" style="background:#007bff;">次へ</button>
-        </div>
-    </div>
+    // --- 習得保存 ---
+    async toggleMastered(event, word) {
+        event.stopPropagation();
+        if (event.target.checked) {
+            if (!state.masteredWords.includes(word)) state.masteredWords.push(word);
+        } else {
+            state.masteredWords = state.masteredWords.filter(w => w !== word);
+        }
+        document.getElementById("complete-badge").style.display = event.target.checked ? "block" : "none";
 
-    <script src="data.js"></script>
+        const { db, doc, setDoc } = window.fb;
+        const docRef = doc(db, "progress", state.studentName, "units", state.currentUnit);
+        try {
+            await setDoc(docRef, { masteredWords: state.masteredWords }, { merge: true });
+        } catch (e) { console.error("保存失敗", e); }
+    },
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+    // --- ナビゲーション ---
+    nextCard() {
+        if (state.currentIndex < state.displayIndices.length - 1) {
+            state.currentIndex++;
+            this.showCard();
+        } else {
+            // 指導事項7: alertをUI表示にしたいが、一旦はシンプルなメッセージ
+            if(confirm("最後まで到達しました。もう一度学習しますか？")) {
+                state.currentIndex = 0;
+                if(state.isRandom) this.prepareIndices();
+                this.showCard();
+            } else {
+                this.showScreen('setup-screen');
+            }
+        }
+    },
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyBSWyVpnL2MfcYYD57HZxpdLjuKaSDkrnQ",
-            authDomain: "readingii.firebaseapp.com",
-            projectId: "readingii",
-            storageBucket: "readingii.firebasestorage.app",
-            messagingSenderId: "662452804754",
-            appId: "1:662452804754:web:51813a97a388bb99601a4b"
-        };
-        const firebaseApp = initializeApp(firebaseConfig);
-        const db = getFirestore(firebaseApp);
+    prevCard() {
+        if (state.currentIndex > 0) {
+            state.currentIndex--;
+            this.showCard();
+        }
+    },
 
-        // windowオブジェクトに集約（app.jsからアクセス可能にする）
-        window.fb = { db, doc, setDoc, getDoc };
-    </script>
-    <script src="app.js"></script>
-</body>
-</html>
+    updateUI() {
+        const total = state.wordList.length;
+        const current = state.currentIndex + 1;
+        document.getElementById('progress-text').innerText = `${current} / ${total}`;
+        document.getElementById('progress-bar').style.width = `${(current / total) * 100}%`;
+    },
+
+    // --- 音声再生 ---
+    playAudio(event) {
+        if (event) event.stopPropagation();
+        const word = document.getElementById('word-display').innerText;
+        window.speechSynthesis.cancel();
+        const ut = new SpeechSynthesisUtterance(word);
+        ut.lang = 'en-US';
+        ut.rate = 0.9;
+        window.speechSynthesis.speak(ut);
+    },
+
+    showError(msg) {
+        const err = document.getElementById('error-message');
+        err.innerText = msg;
+        err.style.display = 'block';
+    }
+};
+
+// 初期化実行
+window.onload = () => app.init();
+// グローバルにappを公開（HTMLのonclick属性から呼ぶため）
+window.app = app;
