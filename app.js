@@ -1,5 +1,5 @@
 /**
- * 英単語学習システム Ver5.0 (フェーズ5対応版)
+ * 英単語学習システム Ver5.1 
  */
 
 const state = {
@@ -32,24 +32,24 @@ const app = {
         }
     },
 
+    // --- カード操作 ---
+    flipCard() {
+        const card = document.getElementById('card');
+        if(card) card.classList.toggle('is-flipped');
+    },
+
     // --- UX: トースト通知 ---
     showToast(message) {
         const container = document.getElementById('toast-container');
         if (!container) return;
-        
         const toast = document.createElement('div');
         toast.className = 'toast';
         toast.innerText = message;
-        
         container.appendChild(toast);
-        
-        // 3秒後に要素を削除
-        setTimeout(() => {
-            toast.remove();
-        }, 3000);
+        setTimeout(() => toast.remove(), 2500);
     },
 
-    // --- 画面遷移管理 ---
+    // --- 画面遷移 ---
     showScreen(screenId) {
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         const target = document.getElementById(screenId);
@@ -81,8 +81,8 @@ const app = {
             this.prepareIndices();
             state.currentIndex = 0;
             if (state.displayIndices.length > 0) {
-                this.showCard();
-                this.showToast(onlyUnlearned ? "未習得の単語のみ表示します" : "すべての単語を表示します");
+                this.updateCardContent(); // 直接コンテンツ更新
+                this.showToast(onlyUnlearned ? "未習得のみ表示" : "すべて表示");
             } else {
                 this.showToast("未習得の単語はありません。すべて表示に戻します。");
                 this.toggleFilterMode(false);
@@ -93,10 +93,7 @@ const app = {
     // --- ログイン・ログアウト ---
     login() {
         const input = document.getElementById('name-input').value.trim();
-        if (!input) {
-            this.showToast("名前を入力してください");
-            return;
-        }
+        if (!input) { this.showToast("名前を入力してください"); return; }
         state.studentName = input;
         localStorage.setItem('studentName', input);
         this.showScreen('setup-screen');
@@ -111,7 +108,7 @@ const app = {
         }
     },
 
-    // --- Unitリスト生成 ---
+    // --- Unitリスト ---
     renderUnitList() {
         const list = document.getElementById('unit-list');
         if (!list || typeof allUnits === 'undefined') return;
@@ -125,7 +122,7 @@ const app = {
         });
     },
 
-    // --- 学習開始 ---
+    // --- 学習ロジック ---
     async startLearning(unitName) {
         state.currentUnit = unitName;
         state.wordList = allUnits[unitName];
@@ -143,13 +140,13 @@ const app = {
         this.prepareIndices();
         
         if (state.displayIndices.length === 0) {
-            this.showToast("未習得の単語がありません！「すべて」で開始します。");
+            this.showToast("未習得がありません。「すべて」で開始します。");
             state.isOnlyUnlearned = false;
             this.prepareIndices();
         }
 
         this.showScreen('learning-screen');
-        this.showCard();
+        this.updateCardContent(); 
     },
 
     prepareIndices() {
@@ -163,22 +160,21 @@ const app = {
         state.displayIndices = indices;
     },
 
-    // --- カード表示 ---
-    showCard() {
+    // 【重要：修正】データ更新と表示を分離
+    updateCardContent() {
         if (state.displayIndices.length === 0) return;
         
         const realIndex = state.displayIndices[state.currentIndex];
         const data = state.wordList[realIndex];
         const isMastered = state.masteredWords.includes(data.Word);
 
-        const cardElement = document.getElementById('card');
-        if(cardElement) cardElement.classList.remove('is-flipped');
-
+        // 表面の更新
         document.getElementById("word-display").innerText = data.Word;
         document.getElementById("pos-display").innerText = data["品詞"] || "";
         document.getElementById("phonetic-display").innerText = data["発音記号"] || "";
         document.getElementById("complete-badge").style.display = isMastered ? "block" : "none";
 
+        // 裏面の更新
         this.renderBackSide(data, isMastered);
         this.updateUI();
     },
@@ -214,7 +210,7 @@ const app = {
         event.stopPropagation();
         if (event.target.checked) {
             if (!state.masteredWords.includes(word)) state.masteredWords.push(word);
-            this.showToast("習得済みに追加しました");
+            this.showToast("習得済みに追加");
         } else {
             state.masteredWords = state.masteredWords.filter(w => w !== word);
         }
@@ -227,29 +223,56 @@ const app = {
                 const docRef = doc(db, "progress", state.studentName, "units", state.currentUnit);
                 await setDoc(docRef, { masteredWords: state.masteredWords }, { merge: true });
             }
-        } catch (e) { console.error("Firebase保存失敗:", e); }
+        } catch (e) { console.error("Firebase Error", e); }
     },
 
+    // 【重要：修正】次のカードへ行く前に、必ずカードを表面に戻す
     nextCard() {
-        if (state.currentIndex < state.displayIndices.length - 1) {
-            state.currentIndex++;
-            this.showCard();
-        } else {
-            if(confirm("最後まで到達しました。もう一度学習しますか？")) {
-                this.prepareIndices();
-                state.currentIndex = 0;
-                this.showCard();
-                this.showToast("最初から再開します");
+        const card = document.getElementById('card');
+        const isFlipped = card.classList.contains('is-flipped');
+
+        const moveNext = () => {
+            if (state.currentIndex < state.displayIndices.length - 1) {
+                state.currentIndex++;
+                this.updateCardContent();
             } else {
-                this.showScreen('setup-screen');
+                if(confirm("最後まで到達しました。もう一度学習しますか？")) {
+                    this.prepareIndices();
+                    state.currentIndex = 0;
+                    this.updateCardContent();
+                    this.showToast("最初から再開します");
+                } else {
+                    this.showScreen('setup-screen');
+                }
             }
+        };
+
+        if (isFlipped) {
+            // 裏側だったら、まず表面に戻してから（アニメーション待ち：0.2秒）データを書き換える
+            card.classList.remove('is-flipped');
+            setTimeout(moveNext, 200); 
+        } else {
+            // 表側だったらそのまま書き換える
+            moveNext();
         }
     },
 
     prevCard() {
-        if (state.currentIndex > 0) {
-            state.currentIndex--;
-            this.showCard();
+        const card = document.getElementById('card');
+        const isFlipped = card.classList.contains('is-flipped');
+
+        const movePrev = () => {
+            if (state.currentIndex > 0) {
+                state.currentIndex--;
+                this.updateCardContent();
+            }
+        };
+
+        if (isFlipped) {
+            card.classList.remove('is-flipped');
+            setTimeout(movePrev, 200);
+        } else {
+            movePrev();
         }
     },
 
