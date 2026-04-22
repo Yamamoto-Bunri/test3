@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>英単語学習システム Ver3</title>
+    <style>
+        :root { --primary-color: #007bff; --bg-color: #f0f2f5; }
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: var(--bg-color); padding: 20px; margin: 0; }
+        
+        .screen { display: none; width: 100%; max-width: 400px; flex-direction: column; align-items: center; animation: fadeIn 0.3s; }
+        .active { display: flex; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        /* 入力フォーム・ボタン共通 */
+        input[type="text"] { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 1em; }
+        button { cursor: pointer; border: none; border-radius: 8px; transition: opacity 0.2s; }
+        button:active { opacity: 0.7; }
+
+        .btn-primary { background: var(--primary-color); color: white; padding: 12px 24px; width: 100%; font-size: 1.1em; }
+        
+        /* Unitリスト */
+        #unit-list { width: 100%; margin-top: 10px; }
+        .unit-btn { width: 100%; padding: 15px; margin: 5px 0; background: white; border: 1px solid #ddd; font-size: 1.1em; text-align: left; }
+
+        /* モード切替 */
+        .mode-select { display: flex; gap: 10px; width: 100%; margin-bottom: 20px; }
+        .mode-btn { flex: 1; padding: 10px; border: 2px solid var(--primary-color); background: white; color: var(--primary-color); font-weight: bold; }
+        .mode-btn.selected { background: var(--primary-color); color: white; }
+
+        /* カードのスタイル */
+        #card-container { width: 100%; height: 450px; perspective: 1000px; margin: 20px 0; }
+        .card { width: 100%; height: 100%; position: relative; transition: transform 0.6s; transform-style: preserve-3d; }
+        .card.is-flipped { transform: rotateY(180deg); }
+        .card-face { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); background: white; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .card-back { transform: rotateY(180deg); overflow-y: auto; display: block; }
+
+        #progress-container { width: 100%; background: #ddd; border-radius: 10px; height: 10px; margin: 10px 0; }
+        #progress-bar { width: 0%; height: 100%; background: #4caf50; border-radius: 10px; transition: width 0.3s; }
+        .nav-buttons { display: flex; justify-content: space-between; width: 100%; margin-top: 10px; }
+        .nav-buttons button { padding: 12px; width: 48%; color: white; font-size: 1em; }
+
+        /* エラー表示 */
+        #error-message { color: red; background: #fee; padding: 10px; border-radius: 5px; margin: 10px 0; display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen" class="screen">
+        <h1>英単語学習</h1>
+        <p>名前を入力してください</p>
+        <input type="text" id="name-input" placeholder="例：山田 太郎">
+        <button class="btn-primary" onclick="app.login()">学習を始める</button>
+    </div>
+
+    <div id="setup-screen" class="screen">
+        <div style="width:100%; display:flex; justify-content:space-between; align-items:center;">
+            <p>生徒: <strong id="display-name"></strong></p>
+            <button onclick="app.logout()" style="background:none; color:blue; text-decoration:underline;">変更</button>
+        </div>
+        
+        <div id="error-message"></div>
+
+        <h3>表示順</h3>
+        <div class="mode-select">
+            <button id="btn-order" class="mode-btn selected" onclick="app.setOrder(false)">順番通り</button>
+            <button id="btn-random" class="mode-btn" onclick="app.setOrder(true)">ランダム</button>
+        </div>
+
+        <h3>Unitを選択</h3>
+        <div id="unit-list"></div>
+    </div>
+
+    <div id="learning-screen" class="screen">
+        <div style="width: 100%; display: flex; justify-content: space-between; align-items: center;">
+            <button onclick="app.showScreen('setup-screen')" style="background:none; color:blue; font-size:1em;">← 戻る</button>
+            <div id="progress-text" style="font-weight:bold; font-size:0.9em;"></div>
+        </div>
+        <div id="progress-container"><div id="progress-bar"></div></div>
+
+        <div id="card-container">
+            <div class="card" id="card" onclick="this.classList.toggle('is-flipped')">
+                <div class="card-face card-front">
+                    <div id="complete-badge" style="position:absolute; top:20px; right:20px; color:green; font-weight:bold; display:none;">✅ 習得済</div>
+                    <p id="pos-display" style="color: #e91e63; font-weight: bold; margin:0;"></p>
+                    <div style="display: flex; align-items: center; gap: 10px; margin: 15px 0;">
+                        <h1 id="word-display" style="font-size: 3em; margin: 0;"></h1>
+                        <button onclick="app.playAudio(event)" style="background:none; font-size: 2em;">🔊</button>
+                    </div>
+                    <p id="phonetic-display" style="color: #666; font-size: 1.1em; margin:0;"></p>
+                    <p style="color:#aaa; font-size:0.8em; position:absolute; bottom:20px;">タップして答えを見る</p>
+                </div>
+                <div class="card-face card-back" id="card-back-contents"></div>
+            </div>
+        </div>
+
+        <div class="nav-buttons">
+            <button onclick="app.prevCard()" style="background:#6c757d;">前へ</button>
+            <button onclick="app.nextCard()" style="background:#007bff;">次へ</button>
+        </div>
+    </div>
+
+    <script src="data.js"></script>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBSWyVpnL2MfcYYD57HZxpdLjuKaSDkrnQ",
+            authDomain: "readingii.firebaseapp.com",
+            projectId: "readingii",
+            storageBucket: "readingii.firebasestorage.app",
+            messagingSenderId: "662452804754",
+            appId: "1:662452804754:web:51813a97a388bb99601a4b"
+        };
+        const firebaseApp = initializeApp(firebaseConfig);
+        const db = getFirestore(firebaseApp);
+
+        // windowオブジェクトに集約（app.jsからアクセス可能にする）
+        window.fb = { db, doc, setDoc, getDoc };
+    </script>
+    <script src="app.js"></script>
+</body>
+</html>
