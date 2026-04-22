@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 const allUnits = {
     "Unit1": [
         {
