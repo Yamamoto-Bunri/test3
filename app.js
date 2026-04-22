@@ -231,4 +231,11 @@ const app = {
 // 初期化実行
 window.onload = () => app.init();
 // グローバルにappを公開（HTMLのonclick属性から呼ぶため）
-window.app = app;
+window.app = app; // HTMLからapp.login()などを呼べるようにする
+
+window.addEventListener('load', () => {
+    // データの読み込み待ちを考慮して100ms遅らせて起動
+    setTimeout(() => {
+        app.init();
+    }, 100);
+});

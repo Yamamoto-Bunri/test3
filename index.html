@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>英単語学習システム Ver3</title>
+    <title>英単語学習システム Ver3.1</title>
     <style>
         :root { --primary-color: #007bff; --bg-color: #f0f2f5; }
         body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: var(--bg-color); padding: 20px; margin: 0; }
@@ -21,16 +21,16 @@
         
         /* Unitリスト */
         #unit-list { width: 100%; margin-top: 10px; }
-        .unit-btn { width: 100%; padding: 15px; margin: 5px 0; background: white; border: 1px solid #ddd; font-size: 1.1em; text-align: left; }
+        .unit-btn { width: 100%; padding: 15px; margin: 5px 0; background: white; border: 1px solid #ddd; font-size: 1.1em; text-align: left; border-radius: 8px; }
 
         /* モード切替 */
         .mode-select { display: flex; gap: 10px; width: 100%; margin-bottom: 20px; }
-        .mode-btn { flex: 1; padding: 10px; border: 2px solid var(--primary-color); background: white; color: var(--primary-color); font-weight: bold; }
+        .mode-btn { flex: 1; padding: 10px; border: 2px solid var(--primary-color); background: white; color: var(--primary-color); font-weight: bold; border-radius: 8px; }
         .mode-btn.selected { background: var(--primary-color); color: white; }
 
         /* カードのスタイル */
         #card-container { width: 100%; height: 450px; perspective: 1000px; margin: 20px 0; }
-        .card { width: 100%; height: 100%; position: relative; transition: transform 0.6s; transform-style: preserve-3d; }
+        .card { width: 100%; height: 100%; position: relative; transition: transform 0.6s; transform-style: preserve-3d; cursor: pointer; }
         .card.is-flipped { transform: rotateY(180deg); }
         .card-face { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); background: white; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .card-back { transform: rotateY(180deg); overflow-y: auto; display: block; }
@@ -38,10 +38,10 @@
         #progress-container { width: 100%; background: #ddd; border-radius: 10px; height: 10px; margin: 10px 0; }
         #progress-bar { width: 0%; height: 100%; background: #4caf50; border-radius: 10px; transition: width 0.3s; }
         .nav-buttons { display: flex; justify-content: space-between; width: 100%; margin-top: 10px; }
-        .nav-buttons button { padding: 12px; width: 48%; color: white; font-size: 1em; }
+        .nav-buttons button { padding: 12px; width: 48%; color: white; font-size: 1em; border-radius: 8px; }
 
         /* エラー表示 */
-        #error-message { color: red; background: #fee; padding: 10px; border-radius: 5px; margin: 10px 0; display: none; }
+        #error-message { color: red; background: #fee; padding: 10px; border-radius: 5px; margin: 10px 0; display: none; border: 1px solid red; width: 100%; text-align: center; }
     </style>
 </head>
 <body>
@@ -56,7 +56,7 @@
     <div id="setup-screen" class="screen">
         <div style="width:100%; display:flex; justify-content:space-between; align-items:center;">
             <p>生徒: <strong id="display-name"></strong></p>
-            <button onclick="app.logout()" style="background:none; color:blue; text-decoration:underline;">変更</button>
+            <button onclick="app.logout()" style="background:none; color:blue; text-decoration:underline;">名前を変更</button>
         </div>
         
         <div id="error-message"></div>
@@ -85,7 +85,7 @@
                     <p id="pos-display" style="color: #e91e63; font-weight: bold; margin:0;"></p>
                     <div style="display: flex; align-items: center; gap: 10px; margin: 15px 0;">
                         <h1 id="word-display" style="font-size: 3em; margin: 0;"></h1>
-                        <button onclick="app.playAudio(event)" style="background:none; font-size: 2em;">🔊</button>
+                        <button onclick="app.playAudio(event)" style="background:none; font-size: 2em; border:none; cursor:pointer;">🔊</button>
                     </div>
                     <p id="phonetic-display" style="color: #666; font-size: 1.1em; margin:0;"></p>
                     <p style="color:#aaa; font-size:0.8em; position:absolute; bottom:20px;">タップして答えを見る</p>
@@ -117,9 +117,13 @@
         const firebaseApp = initializeApp(firebaseConfig);
         const db = getFirestore(firebaseApp);
 
-        // windowオブジェクトに集約（app.jsからアクセス可能にする）
+        // windowオブジェクトにFirebase関数を登録
         window.fb = { db, doc, setDoc, getDoc };
+        
+        // Firebaseの準備ができたらappの初期化を許可するフラグ
+        window.isFirebaseReady = true;
     </script>
+
     <script src="app.js"></script>
 </body>
 </html>
