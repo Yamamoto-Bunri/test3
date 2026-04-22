@@ -1,5 +1,5 @@
 /**
- * 英単語学習システム Ver3.2 (フェーズ3対応版)
+ * 英単語学習システム Ver5.0 (フェーズ5対応版)
  */
 
 const state = {
@@ -9,7 +9,7 @@ const state = {
     displayIndices: [],
     currentIndex: 0,
     isRandom: false,
-    isOnlyUnlearned: false, // 未習得のみフィルタ
+    isOnlyUnlearned: false,
     masteredWords: [],
     activeScreen: ""
 };
@@ -18,11 +18,10 @@ const app = {
     // --- 初期化 ---
     init() {
         if (typeof allUnits === 'undefined') {
-            this.showError("data.js が読み込めませんでした。ファイルを確認してください。");
+            this.showError("data.js が読み込めませんでした。");
             this.showScreen('setup-screen'); 
             return;
         }
-
         const savedName = localStorage.getItem('studentName');
         if (savedName) {
             state.studentName = savedName;
@@ -33,6 +32,23 @@ const app = {
         }
     },
 
+    // --- UX: トースト通知 ---
+    showToast(message) {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+        
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.innerText = message;
+        
+        container.appendChild(toast);
+        
+        // 3秒後に要素を削除
+        setTimeout(() => {
+            toast.remove();
+        }, 3000);
+    },
+
     // --- 画面遷移管理 ---
     showScreen(screenId) {
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -41,7 +57,6 @@ const app = {
             target.classList.add('active');
             state.activeScreen = screenId;
         }
-        
         if (screenId === 'setup-screen') {
             document.getElementById('display-name').innerText = state.studentName;
             const err = document.getElementById('error-message');
@@ -49,11 +64,12 @@ const app = {
         }
     },
 
-    // --- 設定変更（表示順・フィルタ） ---
+    // --- 設定変更 ---
     setOrder(random) {
         state.isRandom = random;
         document.getElementById('btn-order').classList.toggle('selected', !random);
         document.getElementById('btn-random').classList.toggle('selected', random);
+        this.showToast(random ? "ランダム順に設定しました" : "順番通りに設定しました");
     },
 
     toggleFilterMode(onlyUnlearned) {
@@ -61,14 +77,14 @@ const app = {
         document.getElementById('btn-filter-all').classList.toggle('selected', !onlyUnlearned);
         document.getElementById('btn-filter-unlearned').classList.toggle('selected', onlyUnlearned);
         
-        // 学習中であれば、リストを再構成して最初に戻る
         if (state.activeScreen === 'learning-screen') {
             this.prepareIndices();
             state.currentIndex = 0;
             if (state.displayIndices.length > 0) {
                 this.showCard();
+                this.showToast(onlyUnlearned ? "未習得の単語のみ表示します" : "すべての単語を表示します");
             } else {
-                alert("表示できる単語がありません。設定を戻します。");
+                this.showToast("未習得の単語はありません。すべて表示に戻します。");
                 this.toggleFilterMode(false);
             }
         }
@@ -77,11 +93,15 @@ const app = {
     // --- ログイン・ログアウト ---
     login() {
         const input = document.getElementById('name-input').value.trim();
-        if (!input) { alert("名前を入力してください"); return; }
+        if (!input) {
+            this.showToast("名前を入力してください");
+            return;
+        }
         state.studentName = input;
         localStorage.setItem('studentName', input);
         this.showScreen('setup-screen');
         this.renderUnitList();
+        this.showToast(`ようこそ、${input}さん`);
     },
 
     logout() {
@@ -111,7 +131,6 @@ const app = {
         state.wordList = allUnits[unitName];
         state.currentIndex = 0;
 
-        // Firebaseから進捗取得
         try {
             if (window.fb) {
                 const { db, doc, getDoc } = window.fb;
@@ -119,37 +138,28 @@ const app = {
                 const docSnap = await getDoc(docRef);
                 state.masteredWords = docSnap.exists() ? (docSnap.data().masteredWords || []) : [];
             }
-        } catch (e) {
-            console.error("Firebase取得失敗:", e);
-            state.masteredWords = [];
-        }
+        } catch (e) { state.masteredWords = []; }
 
         this.prepareIndices();
         
         if (state.displayIndices.length === 0) {
-            alert("このユニットには未習得の単語がありません！");
-            return;
+            this.showToast("未習得の単語がありません！「すべて」で開始します。");
+            state.isOnlyUnlearned = false;
+            this.prepareIndices();
         }
 
         this.showScreen('learning-screen');
         this.showCard();
     },
 
-    // --- 表示順序とフィルタの準備 ---
     prepareIndices() {
-        // すべてのインデックス
         let indices = state.wordList.map((_, i) => i);
-
-        // 未習得のみフィルタがONの場合
         if (state.isOnlyUnlearned) {
             indices = indices.filter(i => !state.masteredWords.includes(state.wordList[i].Word));
         }
-
-        // ランダム設定があればシャッフル
         if (state.isRandom) {
             indices.sort(() => Math.random() - 0.5);
         }
-
         state.displayIndices = indices;
     },
 
@@ -200,17 +210,16 @@ const app = {
         document.getElementById("card-back-contents").innerHTML = html;
     },
 
-    // --- 習得保存 ---
     async toggleMastered(event, word) {
         event.stopPropagation();
         if (event.target.checked) {
             if (!state.masteredWords.includes(word)) state.masteredWords.push(word);
+            this.showToast("習得済みに追加しました");
         } else {
             state.masteredWords = state.masteredWords.filter(w => w !== word);
         }
         document.getElementById("complete-badge").style.display = event.target.checked ? "block" : "none";
-        
-        this.updateUI(); // 習得率を即座に更新
+        this.updateUI();
 
         try {
             if (window.fb) {
@@ -221,16 +230,16 @@ const app = {
         } catch (e) { console.error("Firebase保存失敗:", e); }
     },
 
-    // --- ナビゲーション ---
     nextCard() {
         if (state.currentIndex < state.displayIndices.length - 1) {
             state.currentIndex++;
             this.showCard();
         } else {
             if(confirm("最後まで到達しました。もう一度学習しますか？")) {
-                this.prepareIndices(); // フィルタ条件で再構成
+                this.prepareIndices();
                 state.currentIndex = 0;
                 this.showCard();
+                this.showToast("最初から再開します");
             } else {
                 this.showScreen('setup-screen');
             }
@@ -244,28 +253,23 @@ const app = {
         }
     },
 
-    // --- UI更新（習得率の視覚化） ---
     updateUI() {
         const totalInUnit = state.wordList.length;
         const masteredInUnit = state.masteredWords.length;
         const progressPercent = (masteredInUnit / totalInUnit) * 100;
-
-        // 習得状況をテキストで表示
         const currentPos = state.currentIndex + 1;
         const displayTotal = state.displayIndices.length;
+
         document.getElementById('progress-text').innerText = 
-            `Unit習得率: ${Math.round(progressPercent)}% (${masteredInUnit}/${totalInUnit}) | 表示中: ${currentPos}/${displayTotal}`;
+            `習得: ${Math.round(progressPercent)}% (${masteredInUnit}/${totalInUnit}) | カード: ${currentPos}/${displayTotal}`;
         
-        // プログレスバーの更新（習得率を表示）
         const bar = document.getElementById('progress-bar');
         if(bar) {
             bar.style.width = `${progressPercent}%`;
-            // 完了したら色を変える
             bar.style.backgroundColor = progressPercent === 100 ? "#4caf50" : "#007bff";
         }
     },
 
-    // --- 音声再生 ---
     playAudio(event) {
         if (event) event.stopPropagation();
         const word = document.getElementById('word-display').innerText;
@@ -288,7 +292,6 @@ const app = {
 
 window.app = app;
 
-// 通信遅延（data.js読み込み）を考慮した初期化
 window.addEventListener('load', () => {
     let retry = 0;
     const check = () => {
@@ -298,7 +301,7 @@ window.addEventListener('load', () => {
             retry++;
             setTimeout(check, 100);
         } else {
-            app.init(); // 5秒待ってダメならエラー表示へ
+            app.init();
         }
     };
     check();
