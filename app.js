@@ -1,5 +1,5 @@
 /**
- * フェーズ1：コード整理（stateオブジェクトへの集約版）
+ * フェーズ1：コード整理（安定・強化版）
  */
 
 const state = {
@@ -14,11 +14,12 @@ const state = {
 };
 
 const app = {
-    // --- 初期化 ---
     init() {
-        // data.js の読み込みチェック (allUnits が存在するか)
+        // データ読み込み失敗時の強力なエラーハンドリング
         if (typeof allUnits === 'undefined') {
-            this.showError("data.js が読み込めませんでした。ファイル名の大文字小文字や読み込み順を確認してください。");
+            const errorText = `【エラー】単語データが見つかりません。\n\n以下の原因が考えられます：\n1. ファイル名が「data.js」になっていない（Data.jsなど大文字はNG）\n2. index.html と同じフォルダに data.js がアップロードされていない\n3. ブラウザが古いデータを記憶している（Ctrl+F5 で更新してください）\n4. data.js の中のデータ形式が壊れている`;
+            
+            this.showError(errorText);
             this.showScreen('setup-screen'); 
             return;
         }
@@ -33,7 +34,6 @@ const app = {
         }
     },
 
-    // --- 画面遷移管理 ---
     showScreen(screenId) {
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         const target = document.getElementById(screenId);
@@ -44,13 +44,11 @@ const app = {
         
         if (screenId === 'setup-screen') {
             document.getElementById('display-name').innerText = state.studentName;
-            // セットアップ画面に戻った時にエラーが出ていれば消す
             const err = document.getElementById('error-message');
-            if (typeof allUnits !== 'undefined') err.style.display = 'none';
+            if (typeof allUnits !== 'undefined' && err) err.style.display = 'none';
         }
     },
 
-    // --- ログイン・ログアウト ---
     login() {
         const input = document.getElementById('name-input').value.trim();
         if (!input) {
@@ -71,10 +69,10 @@ const app = {
         }
     },
 
-    // --- Unitリスト生成 ---
     renderUnitList() {
         const list = document.getElementById('unit-list');
-        if (!list) return;
+        if (!list || typeof allUnits === 'undefined') return; // undefinedなら描画しない
+        
         list.innerHTML = "";
         Object.keys(allUnits).forEach(unit => {
             const btn = document.createElement('button');
@@ -85,13 +83,11 @@ const app = {
         });
     },
 
-    // --- 学習開始 ---
     async startLearning(unitName) {
         state.currentUnit = unitName;
         state.wordList = allUnits[unitName];
         state.currentIndex = 0;
 
-        // Firebaseから進捗取得
         try {
             if (window.fb) {
                 const { db, doc, getDoc } = window.fb;
@@ -109,7 +105,6 @@ const app = {
         this.showCard();
     },
 
-    // --- 表示順序の準備 ---
     prepareIndices() {
         state.displayIndices = state.wordList.map((_, i) => i);
         if (state.isRandom) {
@@ -123,17 +118,16 @@ const app = {
         document.getElementById('btn-random').classList.toggle('selected', random);
     },
 
-    // --- カード表示 ---
     showCard() {
+        if (!state.wordList || state.wordList.length === 0) return;
+        
         const realIndex = state.displayIndices[state.currentIndex];
         const data = state.wordList[realIndex];
         const isMastered = state.masteredWords.includes(data.Word);
 
-        // カードを表面に戻す
         const cardElement = document.getElementById('card');
         if(cardElement) cardElement.classList.remove('is-flipped');
 
-        // 表面の更新
         document.getElementById("word-display").innerText = data.Word;
         document.getElementById("pos-display").innerText = data["品詞"] || "";
         document.getElementById("phonetic-display").innerText = data["発音記号"] || "";
@@ -170,7 +164,6 @@ const app = {
         document.getElementById("card-back-contents").innerHTML = html;
     },
 
-    // --- 習得保存 ---
     async toggleMastered(event, word) {
         event.stopPropagation();
         if (event.target.checked) {
@@ -189,7 +182,6 @@ const app = {
         } catch (e) { console.error("Firebase保存失敗:", e); }
     },
 
-    // --- ナビゲーション ---
     nextCard() {
         if (state.currentIndex < state.displayIndices.length - 1) {
             state.currentIndex++;
@@ -220,7 +212,6 @@ const app = {
         if(bar) bar.style.width = `${(current / total) * 100}%`;
     },
 
-    // --- 音声再生 ---
     playAudio(event) {
         if (event) event.stopPropagation();
         const word = document.getElementById('word-display').innerText;
@@ -241,15 +232,11 @@ const app = {
     }
 };
 
-/**
- * 重要：初期化とグローバル公開
- */
-window.app = app; // これがないと onclick="app.login()" 等が動きません
+window.app = app;
 
-// 全てのファイル（data.js等）が読み終わってから初期化
+// 待機時間を少し長め（200ms）にとり、全てのスクリプト展開を確実に待つ
 window.addEventListener('load', () => {
-    // わずかに遅らせることで読み込み順の競合を完全に回避
     setTimeout(() => {
         app.init();
-    }, 100);
+    }, 200);
 });

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>英単語学習システム Ver3.1</title>
+    <title>英単語学習システム Ver3.2</title>
     <style>
         :root { --primary-color: #007bff; --bg-color: #f0f2f5; }
         body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: var(--bg-color); padding: 20px; margin: 0; }
@@ -12,23 +12,19 @@
         .active { display: flex; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-        /* 入力フォーム・ボタン共通 */
         input[type="text"] { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 1em; }
         button { cursor: pointer; border: none; border-radius: 8px; transition: opacity 0.2s; }
         button:active { opacity: 0.7; }
 
         .btn-primary { background: var(--primary-color); color: white; padding: 12px 24px; width: 100%; font-size: 1.1em; }
         
-        /* Unitリスト */
         #unit-list { width: 100%; margin-top: 10px; }
         .unit-btn { width: 100%; padding: 15px; margin: 5px 0; background: white; border: 1px solid #ddd; font-size: 1.1em; text-align: left; border-radius: 8px; }
 
-        /* モード切替 */
         .mode-select { display: flex; gap: 10px; width: 100%; margin-bottom: 20px; }
         .mode-btn { flex: 1; padding: 10px; border: 2px solid var(--primary-color); background: white; color: var(--primary-color); font-weight: bold; border-radius: 8px; }
         .mode-btn.selected { background: var(--primary-color); color: white; }
 
-        /* カードのスタイル */
         #card-container { width: 100%; height: 450px; perspective: 1000px; margin: 20px 0; }
         .card { width: 100%; height: 100%; position: relative; transition: transform 0.6s; transform-style: preserve-3d; cursor: pointer; }
         .card.is-flipped { transform: rotateY(180deg); }
@@ -40,8 +36,7 @@
         .nav-buttons { display: flex; justify-content: space-between; width: 100%; margin-top: 10px; }
         .nav-buttons button { padding: 12px; width: 48%; color: white; font-size: 1em; border-radius: 8px; }
 
-        /* エラー表示 */
-        #error-message { color: red; background: #fee; padding: 10px; border-radius: 5px; margin: 10px 0; display: none; border: 1px solid red; width: 100%; text-align: center; }
+        #error-message { color: #d8000c; background: #ffbaba; padding: 15px; border-radius: 5px; margin: 10px 0; display: none; width: 100%; text-align: left; font-size: 0.9em; box-sizing: border-box; white-space: pre-wrap; }
     </style>
 </head>
 <body>
@@ -100,7 +95,7 @@
         </div>
     </div>
 
-    <script src="data.js"></script>
+    <script src="data.js" charset="UTF-8"></script>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
@@ -115,16 +110,9 @@
             appId: "1:662452804754:web:51813a97a388bb99601a4b"
         };
         const firebaseApp = initializeApp(firebaseConfig);
-        const db = getFirestore(firebaseApp);
-
-        // windowオブジェクトにFirebase関数を登録
-        window.fb = { db, doc, setDoc, getDoc };
-        
-        // Firebaseの準備ができたらappの初期化を許可するフラグ
-        window.isFirebaseReady = true;
+        window.fb = { db: getFirestore(firebaseApp), doc, setDoc, getDoc };
     </script>
 
-    <script src="data.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
