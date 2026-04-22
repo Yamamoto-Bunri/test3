@@ -18,8 +18,8 @@ const app = {
     init() {
         // data.js の読み込みチェック
         if (typeof allUnits === 'undefined') {
-            this.showError("data.js が読み込めませんでした。ファイルを確認してください。");
-            this.showScreen('setup-screen'); // エラーを表示するためにセットアップ画面へ
+            this.showError("data.js が読み込めませんでした。ファイル名の大文字小文字や読み込み順を確認してください。");
+            this.showScreen('setup-screen');
             return;
         }
 
@@ -61,14 +61,17 @@ const app = {
     },
 
     logout() {
-        localStorage.removeItem('studentName');
-        document.getElementById('name-input').value = "";
-        this.showScreen('login-screen');
+        if(confirm("名前を消去してログアウトしますか？")) {
+            localStorage.removeItem('studentName');
+            document.getElementById('name-input').value = "";
+            this.showScreen('login-screen');
+        }
     },
 
     // --- Unitリスト生成 ---
     renderUnitList() {
         const list = document.getElementById('unit-list');
+        if (!list) return;
         list.innerHTML = "";
         Object.keys(allUnits).forEach(unit => {
             const btn = document.createElement('button');
@@ -85,12 +88,14 @@ const app = {
         state.wordList = allUnits[unitName];
         state.currentIndex = 0;
 
-        // Firebaseから進捗取得
+        // Firebaseから進捗取得（window.fb 経由）
         try {
-            const { db, doc, getDoc } = window.fb;
-            const docRef = doc(db, "progress", state.studentName, "units", unitName);
-            const docSnap = await getDoc(docRef);
-            state.masteredWords = docSnap.exists() ? (docSnap.data().masteredWords || []) : [];
+            if (window.fb) {
+                const { db, doc, getDoc } = window.fb;
+                const docRef = doc(db, "progress", state.studentName, "units", unitName);
+                const docSnap = await getDoc(docRef);
+                state.masteredWords = docSnap.exists() ? (docSnap.data().masteredWords || []) : [];
+            }
         } catch (e) {
             console.error("Firebase取得失敗:", e);
             state.masteredWords = [];
@@ -122,15 +127,15 @@ const app = {
         const isMastered = state.masteredWords.includes(data.Word);
 
         // カードを表面に戻す
-        document.getElementById('card').classList.remove('is-flipped');
+        const cardElement = document.getElementById('card');
+        if(cardElement) cardElement.classList.remove('is-flipped');
 
-        // 表面の更新
+        // 表示の更新
         document.getElementById("word-display").innerText = data.Word;
         document.getElementById("pos-display").innerText = data["品詞"] || "";
         document.getElementById("phonetic-display").innerText = data["発音記号"] || "";
         document.getElementById("complete-badge").style.display = isMastered ? "block" : "none";
 
-        // 裏面の更新
         this.renderBackSide(data, isMastered);
         this.updateUI();
     },
@@ -172,10 +177,12 @@ const app = {
         }
         document.getElementById("complete-badge").style.display = event.target.checked ? "block" : "none";
 
-        const { db, doc, setDoc } = window.fb;
-        const docRef = doc(db, "progress", state.studentName, "units", state.currentUnit);
         try {
-            await setDoc(docRef, { masteredWords: state.masteredWords }, { merge: true });
+            if (window.fb) {
+                const { db, doc, setDoc } = window.fb;
+                const docRef = doc(db, "progress", state.studentName, "units", state.currentUnit);
+                await setDoc(docRef, { masteredWords: state.masteredWords }, { merge: true });
+            }
         } catch (e) { console.error("保存失敗", e); }
     },
 
@@ -185,7 +192,6 @@ const app = {
             state.currentIndex++;
             this.showCard();
         } else {
-            // 指導事項7: alertをUI表示にしたいが、一旦はシンプルなメッセージ
             if(confirm("最後まで到達しました。もう一度学習しますか？")) {
                 state.currentIndex = 0;
                 if(state.isRandom) this.prepareIndices();
@@ -207,13 +213,15 @@ const app = {
         const total = state.wordList.length;
         const current = state.currentIndex + 1;
         document.getElementById('progress-text').innerText = `${current} / ${total}`;
-        document.getElementById('progress-bar').style.width = `${(current / total) * 100}%`;
+        const bar = document.getElementById('progress-bar');
+        if(bar) bar.style.width = `${(current / total) * 100}%`;
     },
 
     // --- 音声再生 ---
     playAudio(event) {
         if (event) event.stopPropagation();
         const word = document.getElementById('word-display').innerText;
+        if (!word) return;
         window.speechSynthesis.cancel();
         const ut = new SpeechSynthesisUtterance(word);
         ut.lang = 'en-US';
@@ -223,18 +231,20 @@ const app = {
 
     showError(msg) {
         const err = document.getElementById('error-message');
-        err.innerText = msg;
-        err.style.display = 'block';
+        if(err) {
+            err.innerText = msg;
+            err.style.display = 'block';
+        }
     }
 };
 
-// 初期化実行
-window.onload = () => app.init();
-// グローバルにappを公開（HTMLのonclick属性から呼ぶため）
-window.app = app; // HTMLからapp.login()などを呼べるようにする
+/**
+ * 重要：初期化とグローバル公開
+ */
+window.app = app; // HTMLの onclick="app.xxx()" を動作させるために必須
 
 window.addEventListener('load', () => {
-    // データの読み込み待ちを考慮して100ms遅らせて起動
+    // Firebaseやデータの読み込み待ちを考慮して100ms遅らせて起動
     setTimeout(() => {
         app.init();
     }, 100);
