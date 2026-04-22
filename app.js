@@ -16,10 +16,10 @@ const state = {
 const app = {
     // --- 初期化 ---
     init() {
-        // data.js の読み込みチェック
+        // data.js の読み込みチェック (allUnits が存在するか)
         if (typeof allUnits === 'undefined') {
             this.showError("data.js が読み込めませんでした。ファイル名の大文字小文字や読み込み順を確認してください。");
-            this.showScreen('setup-screen');
+            this.showScreen('setup-screen'); 
             return;
         }
 
@@ -44,6 +44,9 @@ const app = {
         
         if (screenId === 'setup-screen') {
             document.getElementById('display-name').innerText = state.studentName;
+            // セットアップ画面に戻った時にエラーが出ていれば消す
+            const err = document.getElementById('error-message');
+            if (typeof allUnits !== 'undefined') err.style.display = 'none';
         }
     },
 
@@ -61,7 +64,7 @@ const app = {
     },
 
     logout() {
-        if(confirm("名前を消去してログアウトしますか？")) {
+        if(confirm("名前を削除してログアウトしますか？")) {
             localStorage.removeItem('studentName');
             document.getElementById('name-input').value = "";
             this.showScreen('login-screen');
@@ -88,7 +91,7 @@ const app = {
         state.wordList = allUnits[unitName];
         state.currentIndex = 0;
 
-        // Firebaseから進捗取得（window.fb 経由）
+        // Firebaseから進捗取得
         try {
             if (window.fb) {
                 const { db, doc, getDoc } = window.fb;
@@ -130,7 +133,7 @@ const app = {
         const cardElement = document.getElementById('card');
         if(cardElement) cardElement.classList.remove('is-flipped');
 
-        // 表示の更新
+        // 表面の更新
         document.getElementById("word-display").innerText = data.Word;
         document.getElementById("pos-display").innerText = data["品詞"] || "";
         document.getElementById("phonetic-display").innerText = data["発音記号"] || "";
@@ -183,7 +186,7 @@ const app = {
                 const docRef = doc(db, "progress", state.studentName, "units", state.currentUnit);
                 await setDoc(docRef, { masteredWords: state.masteredWords }, { merge: true });
             }
-        } catch (e) { console.error("保存失敗", e); }
+        } catch (e) { console.error("Firebase保存失敗:", e); }
     },
 
     // --- ナビゲーション ---
@@ -241,10 +244,11 @@ const app = {
 /**
  * 重要：初期化とグローバル公開
  */
-window.app = app; // HTMLの onclick="app.xxx()" を動作させるために必須
+window.app = app; // これがないと onclick="app.login()" 等が動きません
 
+// 全てのファイル（data.js等）が読み終わってから初期化
 window.addEventListener('load', () => {
-    // Firebaseやデータの読み込み待ちを考慮して100ms遅らせて起動
+    // わずかに遅らせることで読み込み順の競合を完全に回避
     setTimeout(() => {
         app.init();
     }, 100);
